@@ -17,6 +17,9 @@ h1{font:700 22px 'Kanit',sans-serif}
 .upd{font-size:13px;opacity:.75}
 .data{font:700 16px 'Kanit';text-decoration:none;border:2px solid var(--tag);color:var(--tag);border-radius:8px;padding:6px 16px}
 main{max-width:1000px;margin:auto;padding:14px 16px 60px}
+.city{display:flex;gap:8px;margin-bottom:12px}
+.cbtn{flex:1;font:700 20px 'Kanit',sans-serif;padding:14px 8px;border:3px solid var(--ink);border-radius:12px;background:#fff;color:var(--ink);cursor:pointer}
+.cbtn.on{background:var(--tag);box-shadow:0 3px 0 var(--ink)}
 .tabs{display:flex;gap:8px;margin-bottom:12px}
 .tab{flex:1;font:700 18px 'Kanit',sans-serif;padding:12px 8px;border:2px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink);cursor:pointer}
 .tab.on{background:var(--ink);color:var(--tag)}
@@ -74,6 +77,7 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
   <a class="data" href="https://docs.google.com/spreadsheets/d/1f7jIXOYD6u32tWUCbuvkRNg-Y__q3ZeHPBMvGanvZV0/edit?gid=0#gid=0" target="_blank" rel="noopener">DATA</a>
 </div></header>
 <main>
+  <div class="city"><button class="cbtn on" data-c="bkk">คลังกรุงเทพ</button><button class="cbtn" data-c="ptt">คลังพัทยา</button></div>
   <div class="tabs">
     <button class="tab on" id="t-ok" data-t="ok"></button>
     <button class="tab" id="t-wait" data-t="wait"></button>
@@ -91,20 +95,21 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
 <div id="modal"><div style="width:100%;max-width:400px;margin:auto">
   <div id="shot">
     <div class="mh"><div class="mk">✓</div><div class="mt">อนุมัติโปรโมชั่นสำเร็จ</div><div class="md" id="mdt"></div></div>
-    <div class="ms"><span>อนุมัติทั้งหมด</span><b id="mn"></b></div>
+    <div class="ms"><span id="mc"></span><b id="mn"></b></div>
     <div id="dl"></div>
   </div>
   <div class="mb"><button id="save">⬇ บันทึกเป็นรูปภาพ</button><button id="close">✕</button></div>
 </div></div>
 <script>
 // ▼ วาง URL ของ Apps Script Web App (ลงท้าย /exec) ตัวใหม่ที่ผูกกับชีตโปร ▼
-const API = 'https://script.google.com/macros/s/AKfycbyUQNAeFnQ0Je_jM2qBLJml6d7-XsOjnEIGDSv54S63Ft0HbGbPjMCQZ2HehS2A3S6HaA/exec';
+const API = 'https://script.google.com/macros/s/AKfycby9sXeW5hrw2YPCNTTSkTGkFFP4Q42Mf0Ywk5EosST150o9CQvcYxX_hqDiXH3iqO2ujw/exec';
 const CLIENT_ID = '909287669276-e9ra107720vef8hkirhod1el8j8aalt5.apps.googleusercontent.com';  // ตัวเดิม
 const SHEET_ID = '1f7jIXOYD6u32tWUCbuvkRNg-Y__q3ZeHPBMvGanvZV0';
-const GID = '0';          // gid ของแท็บโปรในชีต (ดูท้าย URL ชีต)
+const CITY = {bkk: 'กรุงเทพ', ptt: 'พัทยา'};   // ชื่อแท็บในชีตตั้งที่ Code.gs
 const OK_COL = 'V';       // คอลัมน์อนุมัติ
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID;
 
+let city = location.hash === '#ptt' ? 'ptt' : 'bkk', sheet = '';
 let items = [], nameCol = 'D', tab = 'ok', promo = 'ทั้งหมด', q = '', view = [];
 let accessToken = '', tc = null;
 const sel = new Set();
@@ -123,14 +128,26 @@ function dateInfo(v) {
 }
 
 async function load() {
+  const c = city, ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 25000);
   try {
-    const d = await (await fetch(API)).json();
-    items = d.items; nameCol = d.nameCol || 'D';
+    const d = await (await fetch(API + '?city=' + c, {signal: ctl.signal})).json();
+    if (c !== city) return;
+    if (!d.ok) throw new Error(d.err);
+    items = d.items; nameCol = d.nameCol || 'D'; sheet = d.sheet;
     $('upd').textContent = 'อัปเดตล่าสุด ' + new Date(d.updated).toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'}) + ' น.';
     render();
   } catch (e) {
-    $('grid').innerHTML = '<div class="msg">โหลดข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองรีเฟรชหน้านี้</div>';
-  }
+    if (c !== city) return;
+    $('grid').innerHTML = `<div class="msg">โหลดข้อมูลไม่ได้ ${esc(e.name === 'AbortError' ? '(ช้าเกิน 25 วินาที)' : (e.message || ''))}<br>ตรวจสอบอินเทอร์เน็ตหรือชื่อแท็บในชีต แล้วรีเฟรชหน้านี้</div>`;
+  } finally { clearTimeout(to); }
+}
+
+function switchCity(c) {
+  city = c; sel.clear(); items = []; promo = 'ทั้งหมด'; q = ''; $('q').value = ''; st('');
+  $('grid').innerHTML = '<div class="msg">กำลังโหลด…</div>'; $('chips').innerHTML = '';
+  $('bar').hidden = true;
+  document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('on', b.dataset.c === c));
+  load();
 }
 
 function render() {
@@ -207,10 +224,7 @@ async function approve() {
   if (!accessToken) return signIn(approve);
   $('go').disabled = true; st(`กำลังบันทึก ${rows.length} รายการ…`);
   try {
-    const meta = await gapi(SHEETS + '?fields=sheets.properties');
-    const sh = meta.sheets.find(s => String(s.properties.sheetId) === GID);
-    if (!sh) throw new Error('ไม่พบแท็บในชีต (เช็กค่า GID)');
-    const t = "'" + sh.properties.title.replace(/'/g, "''") + "'";
+    const t = "'" + sheet.replace(/'/g, "''") + "'";
     // เช็กชื่อสินค้าในแถวก่อนเขียน กันกรณีมีคนแทรก/ลบแถว
     const chk = await gapi(SHEETS + '/values:batchGet?' + rows.map(i => 'ranges=' + encodeURIComponent(`${t}!${nameCol}${i.row}`)).join('&'));
     const bad = chk.valueRanges.some((v, k) => String(v.values && v.values[0] ? v.values[0][0] : '').trim() !== String(rows[k].name).trim());
@@ -222,6 +236,7 @@ async function approve() {
     const now = new Date(), tz = {timeZone: 'Asia/Bangkok'};
     $('mdt').textContent = now.toLocaleDateString('th-TH', Object.assign({day: 'numeric', month: 'long', year: 'numeric'}, tz)) + ' · ' + now.toLocaleTimeString('th-TH', Object.assign({hour: '2-digit', minute: '2-digit'}, tz)) + ' น.';
     $('mn').textContent = rows.length + ' รายการ';
+    $('mc').textContent = 'คลัง' + CITY[city] + ' · อนุมัติทั้งหมด';
     $('dl').innerHTML = rows.map(i => `<div class="mi"><i>✓</i><span>${esc(i.code || '')}</span><div>${esc(i.name)}</div></div>`).join('');
     rows.forEach(i => sel.delete(i.row)); st('');
     $('modal').style.display = 'flex';
@@ -241,6 +256,9 @@ $('all').onclick = () => {
   render();
 };
 $('go').onclick = approve;
+document.querySelector('.city').onclick = e => { if (e.target.dataset.c) location.hash = e.target.dataset.c; };
+window.onhashchange = () => { const c = location.hash === '#ptt' ? 'ptt' : 'bkk'; if (c !== city) switchCity(c); };
+document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('on', b.dataset.c === city));
 $('q').oninput = e => { q = e.target.value; render(); };
 $('close').onclick = () => { $('modal').style.display = 'none'; };
 $('save').onclick = async () => {
@@ -249,7 +267,7 @@ $('save').onclick = async () => {
   try {
     const c = await html2canvas($('shot'), {backgroundColor: '#fdf8ec', scale: 2, useCORS: true});
     const a = document.createElement('a');
-    a.download = 'อนุมัติโปร-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.png';
+    a.download = 'อนุมัติโปร' + CITY[city] + '-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.png';
     a.href = c.toDataURL('image/png'); a.click();
   } catch (e) { alert('บันทึกรูปภาพไม่สำเร็จ: ' + e.message); }
   finally { b.textContent = t; b.disabled = false; }
