@@ -42,6 +42,11 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
 .b{font-size:15px;font-weight:700;border-radius:6px;padding:3px 9px;background:#eef0f4}
 .b.g{background:#dff3e5;color:var(--ok)}
 .b.r{background:#fbe0e0;color:var(--bad)}
+.pe{margin:2px 0 6px}
+.pe label{display:block;font-size:14px;color:var(--mut);font-weight:600}
+.pin{width:100%;font:700 30px 'Kanit',sans-serif;padding:4px 10px;border:2px solid var(--ink);border-radius:8px;background:#fffbe8;color:var(--ink)}
+.pin.sm{font-size:20px}
+.warn{color:var(--bad);font-weight:700}
 .trio{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
 .trio div{background:#eef0f4;border-radius:8px;padding:6px 4px;text-align:center}
 .trio small{display:block;font-size:12px;color:var(--mut)}
@@ -106,18 +111,19 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
 </div></div>
 <script>
 // ▼ วาง URL ของ Apps Script Web App (ลงท้าย /exec) ตัวใหม่ที่ผูกกับชีตโปร ▼
-const API = 'https://script.google.com/macros/s/AKfycbz-ITgquXuA50fbT_OtQb7FbELqNoCncdMxWmEUl5kRC7VfhpIPOOiHqNCsDXyJUAhI/exec';
+const API = 'https://script.google.com/macros/s/AKfycbwn-0Op-2BjffgJguM-b7AZpDNOp7Gm8qPY1zXGcwJtnjlxYSvuMfxPoHYxYEA4Hiql9A/exec';
 const CLIENT_ID = '909287669276-e9ra107720vef8hkirhod1el8j8aalt5.apps.googleusercontent.com';  // ตัวเดิม
 const SHEET_ID = '1f7jIXOYD6u32tWUCbuvkRNg-Y__q3ZeHPBMvGanvZV0';
 const CITY = {bkk: 'คลังกรุงเทพ', ptt: 'คลังพัทยา', uc: 'ทีม UC'};
 const hashCity = () => CITY[location.hash.slice(1)] ? location.hash.slice(1) : 'bkk';   // ชื่อแท็บในชีตตั้งที่ Code.gs
 const OK_COL = 'V';       // คอลัมน์อนุมัติ
+const PRICE_COLS = ['W', 'X'];   // W = ราคาที่อนุมัติ NV, X = ราคาที่อนุมัติ V
 const SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID;
 
 let city = hashCity(), sheet = '';
 let items = [], nameCol = 'D', tab = 'ok', promo = 'ทั้งหมด', q = '', view = [];
 let accessToken = '', tc = null;
-const sel = new Set();
+const sel = new Set(), edits = new Map();   // edits: row -> {nv, v} ราคาที่นายพิมพ์ปรับ
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const isNum = v => typeof v === 'number' && isFinite(v);
@@ -126,10 +132,18 @@ const MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','ม�
 const st = (t, c) => { $('st').textContent = t || ''; $('st').className = c || ''; };
 
 function dateInfo(v) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
-  if (!m) return v ? {text: String(v), expired: false} : null;
-  const d = new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
-  return {text: `${+m[3]} ${MON[+m[2] - 1]} ${+m[1] + 543}`, expired: d < new Date()};
+  if (!v) return null;
+  let str = String(v);
+  const iso = /^\d{4}-\d{2}-\d{2}T/.test(str);
+  if (iso) {                                   // ISO ดิบจากชีต (UTC) -> แปลงเป็นวันที่เวลาไทย
+    const d = new Date(new Date(str).getTime() + 7 * 3600 * 1000);
+    str = d.toISOString().slice(0, 10);
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (!m) return {text: str, expired: false};
+  const y = +m[1], be = y > 2400 ? y : y + 543, ce = be - 543;   // ปี > 2400 ถือว่าเป็น พ.ศ. อยู่แล้ว
+  const d = new Date(ce, +m[2] - 1, +m[3], 23, 59, 59);
+  return {text: `${+m[3]} ${MON[+m[2] - 1]} ${be}`, expired: d < new Date()};
 }
 
 async function load() {
@@ -148,7 +162,7 @@ async function load() {
 }
 
 function switchCity(c) {
-  city = c; sel.clear(); items = []; promo = 'ทั้งหมด'; q = ''; $('q').value = ''; st('');
+  city = c; sel.clear(); edits.clear(); items = []; promo = 'ทั้งหมด'; q = ''; $('q').value = ''; st('');
   $('grid').innerHTML = '<div class="msg">กำลังโหลด…</div>'; $('chips').innerHTML = '';
   $('bar').hidden = true;
   document.querySelectorAll('.cbtn').forEach(b => b.classList.toggle('on', b.dataset.c === c));
@@ -176,29 +190,59 @@ function count() {
   $('cnt').textContent = `เลือกแล้ว ${n} รายการ`;
 }
 
+const r2 = x => Math.round(x * 100) / 100;
+// ราคาที่ใช้แสดง: ที่นายพิมพ์อยู่ > ราคาที่อนุมัติ (W,X) > ราคาเดิมในชีต (P,Q)
+const eff = i => edits.get(i.row) || {nv: isNum(i.apprNV) ? i.apprNV : i.priceNoVat, v: isNum(i.apprV) ? i.apprV : i.priceVat};
+function calc(i, p) {
+  const ok = isNum(i.qty) && i.qty > 0 && isNum(p.v);
+  const totV = ok ? r2(p.v * i.qty) : null, totNV = ok && isNum(p.nv) ? r2(p.nv * i.qty) : null;
+  const profit = totV !== null && isNum(i.costTotal) ? r2(totV - i.costTotal) : null;
+  return {totV, totNV, profit, pct: profit !== null && i.costTotal ? profit / i.costTotal : null};
+}
+const totHtml = c => c.totV === null ? '' : `ยอดทั้งเที่ยว ${fmt(c.totV)} บาท (รวม VAT)` + (c.totNV !== null ? ` · ก่อน VAT ${fmt(c.totNV)} บาท` : '');
+const costHtml = (i, c) => (isNum(i.costUnit) || c.profit !== null)
+  ? `<div class="cost">ต้นทุน <b>${isNum(i.costUnit) ? fmt(i.costUnit) : '-'}</b>/${esc(i.unit)}
+      · กำไร <b>${c.pct !== null ? fmt(c.pct * 100) + '%' : '-'}</b>
+      · ทั้งเที่ยว <b>${c.profit !== null ? fmt(c.profit) : '-'}</b> บาท${c.profit !== null && c.profit < 0 ? ' <span class="warn">⚠ ขาดทุน</span>' : ''}</div>` : '';
+const pin = (i, k, v, cls) => `<input class="pin ${cls || ''}" type="number" step="0.01" min="0" inputmode="decimal" placeholder="ใส่ราคา" data-r="${i.row}" data-k="${k}" value="${isNum(v) ? v : ''}">`;
+
 function card(i) {
-  const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, has = isNum(i.priceVat);
+  const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, p = eff(i), c = calc(i, p);
   const box = (l, v) => `<div><small>${l}</small><b>${isNum(v) ? fmt(v) : (v ? esc(v) : '-')}</b></div>`;
   let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}">`;
-  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอคุณหนึ่งอนุมัติ</span></div>';
+  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอนายติ๊กพิจารณา</span></div>';
   h += `<div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
-  h += has ? `<div class="pr">${fmt(i.priceVat)} <small>บาท/${esc(i.unit)} (รวม VAT)</small></div>
-    ${isNum(i.priceNoVat) ? `<div class="sub">ก่อน VAT ${fmt(i.priceNoVat)} บาท</div>` : ''}`
-    : '<div class="wait">รอราคา</div>';
-  if (isNum(i.totalVat)) h += `<div class="sub">ยอดทั้งเที่ยว ${fmt(i.totalVat)} บาท (รวม VAT) · ก่อน VAT ${fmt(Math.round(i.totalVat / 1.07 * 100) / 100)} บาท</div>`;
-  h += '<div class="row">';
+  if (!i.approved) {
+    h += `<div class="pe"><label>ราคา รวม VAT (บาท/${esc(i.unit)}) · พิมพ์ปรับได้</label>${pin(i, 'v', p.v)}</div>
+      <div class="pe"><label>ก่อน VAT</label>${pin(i, 'nv', p.nv, 'sm')}</div>`;
+  } else if (isNum(p.v)) {
+    h += `<div class="pr">${fmt(p.v)} <small>บาท/${esc(i.unit)} (รวม VAT)</small></div>
+      ${isNum(p.nv) ? `<div class="sub">ก่อน VAT ${fmt(p.nv)} บาท</div>` : ''}`;
+  } else h += '<div class="wait">รอราคา</div>';
+  h += `<div class="sub" id="tt-${i.row}">${totHtml(c)}</div><div class="row">`;
   if (isNum(i.qty)) h += `<span class="b">ราคานี้เมื่อสั่ง ${fmt(i.qty)} ${esc(i.unit)}</span>`;
   if (i.delivery) h += `<span class="b">🚚 ${esc(i.delivery)}</span>`;
   if (dt) h += `<span class="b ${dt.expired ? 'r' : 'g'}">${dt.expired ? 'หมดโปรแล้ว ' : 'โปรถึง '}${esc(dt.text)}</span>`;
   h += '</div>';
   h += `<div class="trio">${box('คู่แข่ง', i.competitor)}${box('ตลาด', i.market)}${box('ราคาจัดซื้อ', i.buyPrice)}</div>`;
-  if (isNum(i.costUnit) || isNum(i.profit))
-    h += `<div class="cost">ต้นทุน <b>${isNum(i.costUnit) ? fmt(i.costUnit) : '-'}</b>/${esc(i.unit)}
-      · กำไร <b>${isNum(i.profitPct) ? fmt(i.profitPct * 100) + '%' : '-'}</b>
-      · ทั้งเที่ยว <b>${isNum(i.profit) ? fmt(i.profit) : '-'}</b> บาท</div>`;
+  h += `<div id="cs-${i.row}">${costHtml(i, c)}</div>`;
   if (i.note) h += `<div class="sub">📝 ${esc(i.note)}</div>`;
   if (!i.approved) h += `<label class="ck"><input type="checkbox" class="pck" data-r="${i.row}" ${sel.has(i.row) ? 'checked' : ''}> ติ๊กเพื่ออนุมัติ</label>`;
   return h + '</div>';
+}
+
+function onPin(el) {                       // พิมพ์ช่องใดช่องหนึ่ง อีกช่องและยอดต่างๆ คำนวณตาม
+  const r = +el.dataset.r, i = items.find(x => x.row === r), card = el.closest('.card');
+  const other = card.querySelector('.pin[data-k="' + (el.dataset.k === 'v' ? 'nv' : 'v') + '"]');
+  const val = parseFloat(el.value);
+  let p;
+  if (!isFinite(val) || val <= 0) { p = {nv: NaN, v: NaN}; other.value = ''; }
+  else if (el.dataset.k === 'v') { p = {v: r2(val), nv: r2(val / 1.07)}; other.value = p.nv; }
+  else { p = {nv: r2(val), v: r2(val * 1.07)}; other.value = p.v; }
+  edits.set(r, p);
+  const c = calc(i, p);
+  $('tt-' + r).innerHTML = totHtml(c);
+  $('cs-' + r).innerHTML = costHtml(i, c);
 }
 
 // ── Google Sign-In (OAuth token เดียวกับแดชบอร์ดอนุมัติปรับราคา) ──
@@ -224,24 +268,31 @@ async function gapi(url, opt) {
 async function approve() {
   const rows = items.filter(i => !i.approved && sel.has(i.row));
   if (!rows.length) return st('กรุณาติ๊กเลือกอย่างน้อย 1 รายการก่อนอนุมัติ', 'err');
+  const bad = rows.filter(i => { const p = eff(i); return !(isNum(p.nv) && p.nv > 0 && isNum(p.v) && p.v > 0); });
+  if (bad.length) return st('กรุณาใส่ราคาก่อนอนุมัติ: ' + bad.slice(0, 3).map(i => i.name).join(', ') + (bad.length > 3 ? ' ...' : ''), 'err');
+  const loss = rows.filter(i => { const c = calc(i, eff(i)); return c.profit !== null && c.profit < 0; });
+  if (loss.length && !confirm(`มี ${loss.length} รายการที่ราคาต่ำกว่าต้นทุน (ขาดทุน) ยืนยันอนุมัติต่อไหม?`)) return;
   if (!accessToken) return signIn(approve);
   $('go').disabled = true; st(`กำลังบันทึก ${rows.length} รายการ…`);
   try {
     const t = "'" + sheet.replace(/'/g, "''") + "'";
     // เช็กชื่อสินค้าในแถวก่อนเขียน กันกรณีมีคนแทรก/ลบแถว
     const chk = await gapi(SHEETS + '/values:batchGet?' + rows.map(i => 'ranges=' + encodeURIComponent(`${t}!${nameCol}${i.row}`)).join('&'));
-    const bad = chk.valueRanges.some((v, k) => String(v.values && v.values[0] ? v.values[0][0] : '').trim() !== String(rows[k].name).trim());
-    if (bad) { await load(); throw new Error('ข้อมูลในชีตเปลี่ยนไป โหลดใหม่ให้แล้ว กรุณาติ๊กและกดอนุมัติอีกครั้ง'); }
-    await gapi(SHEETS + '/values:batchUpdate', {method: 'POST', body: JSON.stringify({
-      valueInputOption: 'USER_ENTERED',
-      data: rows.map(i => ({range: `${t}!${OK_COL}${i.row}`, values: [[1]]}))
-    })});
+    const badRow = chk.valueRanges.some((v, k) => String(v.values && v.values[0] ? v.values[0][0] : '').trim() !== String(rows[k].name).trim());
+    if (badRow) { await load(); throw new Error('ข้อมูลในชีตเปลี่ยนไป โหลดใหม่ให้แล้ว กรุณาติ๊กและกดอนุมัติอีกครั้ง'); }
+    const data = [];
+    rows.forEach(i => {
+      const p = eff(i);
+      data.push({range: `${t}!${PRICE_COLS[0]}${i.row}:${PRICE_COLS[1]}${i.row}`, values: [[p.nv, p.v]]});   // W, X
+      data.push({range: `${t}!${OK_COL}${i.row}`, values: [[1]]});                                           // V = 1
+    });
+    await gapi(SHEETS + '/values:batchUpdate', {method: 'POST', body: JSON.stringify({valueInputOption: 'USER_ENTERED', data})});
     const now = new Date(), tz = {timeZone: 'Asia/Bangkok'};
     $('mdt').textContent = now.toLocaleDateString('th-TH', Object.assign({day: 'numeric', month: 'long', year: 'numeric'}, tz)) + ' · ' + now.toLocaleTimeString('th-TH', Object.assign({hour: '2-digit', minute: '2-digit'}, tz)) + ' น.';
     $('mn').textContent = rows.length + ' รายการ';
     $('mc').textContent = CITY[city] + ' · อนุมัติทั้งหมด';
-    $('dl').innerHTML = rows.map(i => `<div class="mi"><i>✓</i><span>${esc(i.code || '')}</span><div>${esc(i.name)}</div></div>`).join('');
-    rows.forEach(i => sel.delete(i.row)); st('');
+    $('dl').innerHTML = rows.map(i => `<div class="mi"><i>✓</i><span>${esc(i.code || '')}</span><div>${esc(i.name)}</div><b style="font-size:14px;white-space:nowrap">${fmt(eff(i).v)}</b></div>`).join('');
+    rows.forEach(i => { sel.delete(i.row); edits.delete(i.row); }); st('');
     $('modal').style.display = 'flex';
     await load();
   } catch (e) {
@@ -252,6 +303,7 @@ async function approve() {
 
 document.querySelector('.tabs').onclick = e => { if (e.target.dataset.t) { tab = e.target.dataset.t; promo = 'ทั้งหมด'; st(''); render(); } };
 $('chips').onclick = e => { if (e.target.dataset.p) { promo = e.target.dataset.p; render(); } };
+$('grid').oninput = e => { if (e.target.classList.contains('pin')) onPin(e.target); };
 $('grid').onchange = e => { if (e.target.classList.contains('pck')) { const r = +e.target.dataset.r; e.target.checked ? sel.add(r) : sel.delete(r); count(); } };
 $('all').onclick = () => {
   const all = view.length && view.every(i => sel.has(i.row));
@@ -275,8 +327,10 @@ $('save').onclick = async () => {
   } catch (e) { alert('บันทึกรูปภาพไม่สำเร็จ: ' + e.message); }
   finally { b.textContent = t; b.disabled = false; }
 };
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
-setInterval(load, 60000);
+// รีเฟรชอัตโนมัติ แต่ไม่รีเฟรชตอนนายกำลังพิมพ์ราคา (กันช่องหลุดโฟกัส)
+const auto = () => { const a = document.activeElement; if (a && a.classList && a.classList.contains('pin')) return; load(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) auto(); });
+setInterval(auto, 60000);
 load();
 </script>
 </body>
