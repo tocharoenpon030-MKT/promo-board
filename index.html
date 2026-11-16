@@ -210,7 +210,7 @@ function card(i) {
   const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, p = eff(i), c = calc(i, p);
   const box = (l, v) => `<div><small>${l}</small><b>${isNum(v) ? fmt(v) : (v ? esc(v) : '-')}</b></div>`;
   let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}">`;
-  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอนายติ๊กพิจารณา</span></div>';
+  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอผู้บริหารพิจารณา</span></div>';
   h += `<div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
   if (!i.approved) {
     h += `<div class="pe"><label>ราคา รวม VAT (บาท/${esc(i.unit)}) · พิมพ์ปรับได้</label>${pin(i, 'v', p.v)}</div>
