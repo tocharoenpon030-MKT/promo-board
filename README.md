@@ -1,2 +1,0 @@
-# promo-board
-promo-board
