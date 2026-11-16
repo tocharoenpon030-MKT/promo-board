@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ป้ายราคาพิเศษ</title>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--ink:#14233b;--paper:#f6f4ee;--card:#fff;--tag:#ffc20e;--ok:#17803d;--bad:#c62828;--mut:#5d6879;--line:#e3dfd2}
 *{box-sizing:border-box;margin:0}
@@ -13,17 +14,20 @@ header{background:var(--ink);color:#fff;padding:14px 16px;position:sticky;top:0;
 .hd{max-width:1000px;margin:auto;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 h1{font:700 22px 'Kanit',sans-serif}
 .upd{font-size:13px;opacity:.75}
-.lock{font:600 16px 'Sarabun';border:2px solid var(--tag);background:none;color:var(--tag);border-radius:8px;padding:8px 12px;cursor:pointer}
-.lock.on{background:var(--tag);color:var(--ink)}
+.data{font:700 16px 'Kanit';text-decoration:none;border:2px solid var(--tag);color:var(--tag);border-radius:8px;padding:6px 16px}
 main{max-width:1000px;margin:auto;padding:14px 16px 60px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab{flex:1;font:700 18px 'Kanit',sans-serif;padding:12px 8px;border:2px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink);cursor:pointer}
+.tab.on{background:var(--ink);color:var(--tag)}
 input[type=search]{width:100%;font:inherit;padding:13px 14px;border:2px solid var(--line);border-radius:10px;background:#fff}
-input:focus,button:focus-visible{outline:3px solid var(--tag);outline-offset:1px}
+input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);outline-offset:1px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0}
-.chip{white-space:nowrap;font:600 17px 'Sarabun';padding:10px 16px;border-radius:99px;border:2px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer}
-.chip.on{background:var(--ink);color:#fff}
+.chip{white-space:nowrap;font:600 17px 'Sarabun';padding:8px 15px;border-radius:99px;border:2px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+.chip.on{border-color:var(--ink);background:var(--tag);font-weight:700}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
 .card{background:var(--card);border:1px solid var(--line);border-left:10px solid var(--tag);border-radius:6px 14px 14px 6px;padding:14px 16px}
 .card.off{border-left-color:#bbb;opacity:.7}
+.card.wt{border-left-color:var(--ink)}
 .tg{font-size:14px;color:var(--mut);font-weight:600}
 .nm{font-weight:700;font-size:19px;margin:2px 0 8px}
 .pr{font:700 38px/1.1 'Kanit',sans-serif}
@@ -36,31 +40,47 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);outline-offset:1px
 .b.r{background:#fbe0e0;color:var(--bad)}
 .cost{margin-top:12px;padding:10px;border:2px dashed var(--ink);border-radius:8px;font-size:16px;background:#fffbe8}
 .cost b{font-family:'Kanit'}
+.act{margin-top:12px;width:100%;font:700 18px 'Kanit';padding:11px;border-radius:10px;border:2px solid var(--ok);background:var(--ok);color:#fff;cursor:pointer}
+.act.no{background:#fff;color:var(--bad);border-color:var(--bad);font-size:15px;padding:7px}
 .msg{padding:30px;text-align:center;color:var(--mut)}
+footer{text-align:center;margin-top:30px}
+footer button{background:none;border:none;color:var(--mut);font:15px 'Sarabun';text-decoration:underline;cursor:pointer}
+dialog{border:none;border-radius:14px;padding:22px;max-width:320px;margin:auto;text-align:center}
+dialog::backdrop{background:rgba(20,35,59,.6)}
+dialog p{margin-bottom:14px}
 </style>
 </head>
 <body>
 <header><div class="hd">
   <div><h1>ป้ายราคาพิเศษ</h1><div class="upd" id="upd">กำลังโหลด…</div></div>
-  <button class="lock" id="lock">🔒 ดูต้นทุน/กำไร</button>
+  <a class="data" href="https://docs.google.com/spreadsheets/d/1f7jIXOYD6u32tWUCbuvkRNg-Y__q3ZeHPBMvGanvZV0/edit?gid=0#gid=0" target="_blank" rel="noopener">DATA</a>
 </div></header>
 <main>
+  <div class="tabs">
+    <button class="tab on" id="t-ok" data-t="ok"></button>
+    <button class="tab" id="t-wait" data-t="wait"></button>
+  </div>
   <input type="search" id="q" placeholder="ค้นหาสินค้า เช่น เหล็ก, ปูน, หิน">
   <div class="chips" id="chips"></div>
   <div class="grid" id="grid"></div>
+  <footer><button id="login">สำหรับผู้อนุมัติ: เข้าสู่ระบบ Google</button></footer>
 </main>
+<dialog id="dlg"><p>เข้าสู่ระบบด้วยบัญชี Google ของผู้อนุมัติ</p><div id="gbtn"></div><p></p><button class="chip" id="close">ปิด</button></dialog>
 <script>
-// ▼ วาง URL ของ Apps Script Web App ตรงนี้ (ลงท้าย /exec) ▼
-const API = 'https://script.google.com/macros/s/AKfycbxzl4p3Z3swFwE2oq3QQQ8F5W42XWMddSO-nssQsTrctDschi3MEp8rWWPGqQT47-PBJw/exec';
+// ▼ ตั้งค่า 2 ค่านี้ ▼
+const API = 'https://script.google.com/macros/s/AKfycbxSfULd0DecTj8-xcGb5xAlEwWKkheyOKKYmD67-t69VNqVQJ-K9IPAistd9_bSnecPHw/exec';
+const CLIENT_ID = '909287669276-unf0kgsr9ufpj5jfc3em183kbt0e9e90.apps.googleusercontent.com';
+const APPROVER = 'T.tiansiri@gmail.com';   // ใช้แสดงปุ่มเท่านั้น (ตัวตรวจจริงอยู่ที่ Apps Script)
 
-let items = [], code = '', unlocked = false, promo = 'ทั้งหมด', q = '', updated = '';
+let items = [], tab = 'ok', promo = 'ทั้งหมด', q = '', token = '', me = '', gsi = false;
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const isNum = v => typeof v === 'number' && isFinite(v);
 const fmt = v => v.toLocaleString('th-TH', {maximumFractionDigits: 2});
 const MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const isBoss = () => me === APPROVER.toLowerCase();
 
-function dateInfo(v) {                       // คืน {text, expired}
+function dateInfo(v) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
   if (!m) return v ? {text: String(v), expired: false} : null;
   const d = new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59);
@@ -69,11 +89,9 @@ function dateInfo(v) {                       // คืน {text, expired}
 
 async function load() {
   try {
-    const r = await fetch(API + (code ? '?code=' + encodeURIComponent(code) : ''));
-    const d = await r.json();
-    if (d.codeWrong) { alert('รหัสไม่ถูกต้อง'); code = ''; return load(); }
-    items = d.items; unlocked = d.unlocked; updated = d.updated;
-    $('upd').textContent = 'อัปเดตล่าสุด ' + new Date(updated).toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'}) + ' น.';
+    const d = await (await fetch(API)).json();
+    items = d.items;
+    $('upd').textContent = 'อัปเดตล่าสุด ' + new Date(d.updated).toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'}) + ' น.';
     render();
   } catch (e) {
     $('grid').innerHTML = '<div class="msg">โหลดข้อมูลไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองรีเฟรชหน้านี้</div>';
@@ -81,23 +99,28 @@ async function load() {
 }
 
 function render() {
-  const names = ['ทั้งหมด', ...new Set(items.map(i => i.promo).filter(Boolean))];
+  const ok = items.filter(i => i.approved), wt = items.filter(i => !i.approved);
+  $('t-ok').textContent = `โปรผ่านการพิจารณา (${ok.length})`;
+  $('t-wait').textContent = `โปรรอพิจารณา (${wt.length})`;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+  const pool = tab === 'ok' ? ok : wt;
+  const names = ['ทั้งหมด', ...new Set(pool.map(i => i.promo).filter(Boolean))];
+  if (!names.includes(promo)) promo = 'ทั้งหมด';
   $('chips').innerHTML = names.map(n => `<button class="chip ${n === promo ? 'on' : ''}" data-p="${esc(n)}">${esc(n)}</button>`).join('');
   const k = q.trim().toLowerCase();
-  const list = items.filter(i => (promo === 'ทั้งหมด' || i.promo === promo) &&
-    (!k || [i.name, i.group, i.promo].join(' ').toLowerCase().includes(k)));
-  $('grid').innerHTML = list.length ? list.map(card).join('') : '<div class="msg">ไม่พบสินค้าที่ค้นหา</div>';
-  $('lock').className = 'lock' + (unlocked ? ' on' : '');
-  $('lock').textContent = unlocked ? '🔓 ซ่อนต้นทุน/กำไร' : '🔒 ดูต้นทุน/กำไร';
+  const list = pool.filter(i => (promo === 'ทั้งหมด' || i.promo === promo) && (!k || [i.name, i.group, i.promo].join(' ').toLowerCase().includes(k)));
+  $('grid').innerHTML = list.length ? list.map(card).join('') : '<div class="msg">ไม่พบสินค้าในหมวดนี้</div>';
 }
 
 function card(i) {
-  const dt = dateInfo(i.validUntil), off = dt && dt.expired, has = isNum(i.priceVat);
-  let h = `<div class="card ${off ? 'off' : ''}"><div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
+  const idx = items.indexOf(i), dt = dateInfo(i.validUntil);
+  const off = i.approved && dt && dt.expired, has = isNum(i.priceVat);
+  let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}"><div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
   h += has ? `<div class="pr">${fmt(i.priceVat)} <small>บาท/${esc(i.unit)} (รวม VAT)</small></div>
     ${isNum(i.priceNoVat) ? `<div class="sub">ก่อน VAT ${fmt(i.priceNoVat)} บาท</div>` : ''}`
     : '<div class="wait">รอราคา</div>';
   h += '<div class="row">';
+  if (!i.approved) h += '<span class="b">⏳ รอนายติ๊กพิจารณา</span>';
   if (isNum(i.qty)) h += `<span class="b">ราคานี้เมื่อสั่ง ${fmt(i.qty)} ${esc(i.unit)}</span>`;
   if (i.delivery) h += `<span class="b">🚚 ${esc(i.delivery)}</span>`;
   if (has && isNum(i.competitor)) {
@@ -105,24 +128,58 @@ function card(i) {
     h += diff > 0 ? `<span class="b g">ถูกกว่าคู่แข่ง ${fmt(diff)} บาท</span>` : `<span class="b">คู่แข่ง ${fmt(i.competitor)}</span>`;
   } else if (i.competitor) h += `<span class="b">คู่แข่ง: ${esc(i.competitor)}</span>`;
   if (isNum(i.market)) h += `<span class="b">ตลาด ${fmt(i.market)}</span>`;
-  if (dt) h += `<span class="b ${dt.expired ? 'r' : 'g'}">${dt.expired ? 'หมดโปรแล้ว ' : 'ยืนราคาถึง '}${esc(dt.text)}</span>`;
+  if (dt) h += `<span class="b ${dt.expired ? 'r' : 'g'}">${dt.expired ? 'หมดโปรแล้ว ' : 'โปรถึง '}${esc(dt.text)}</span>`;
   h += '</div>';
   if (isNum(i.totalVat)) h += `<div class="sub">ยอดทั้งเที่ยว ${fmt(i.totalVat)} บาท (รวม VAT)</div>`;
   if (i.note) h += `<div class="sub">📝 ${esc(i.note)}</div>`;
-  if (unlocked && (isNum(i.costUnit) || isNum(i.profit)))
+  if (isNum(i.costUnit) || isNum(i.profit))
     h += `<div class="cost">ต้นทุน <b>${isNum(i.costUnit) ? fmt(i.costUnit) : '-'}</b>/${esc(i.unit)}
       · กำไร <b>${isNum(i.profitPct) ? fmt(i.profitPct * 100) + '%' : '-'}</b>
       · ทั้งเที่ยว <b>${isNum(i.profit) ? fmt(i.profit) : '-'}</b> บาท</div>`;
+  if (isBoss()) h += i.approved
+    ? `<button class="act no" data-a="unapprove" data-i="${idx}">ยกเลิกอนุมัติ</button>`
+    : `<button class="act" data-a="approve" data-i="${idx}">✔ อนุมัติโปรนี้</button>`;
   return h + '</div>';
 }
 
+function openLogin() {
+  if (!gsi) {
+    if (!window.google) return alert('ยังโหลดระบบล็อกอินไม่เสร็จ ลองใหม่อีกครั้ง');
+    google.accounts.id.initialize({client_id: CLIENT_ID, callback: onCred});
+    google.accounts.id.renderButton($('gbtn'), {theme: 'filled_blue', size: 'large', locale: 'th'});
+    gsi = true;
+  }
+  $('dlg').showModal();
+}
+
+function onCred(r) {
+  token = r.credential;
+  const p = JSON.parse(decodeURIComponent(escape(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))));
+  me = (p.email || '').toLowerCase();
+  $('dlg').close();
+  if (!isBoss()) { alert('บัญชีนี้ไม่มีสิทธิ์อนุมัติ'); me = token = ''; }
+  render();
+}
+
+async function act(action, i) {
+  if (!confirm((action === 'approve' ? 'อนุมัติ' : 'ยกเลิกอนุมัติ') + ' "' + i.name + '" ใช่ไหม?')) return;
+  try {
+    const r = await (await fetch(API, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({action, row: i.row, name: i.name, token})})).json();
+    if (r.ok) return load();
+    if (r.err === 'auth') { token = me = ''; alert('หมดเวลาล็อกอิน กรุณาเข้าสู่ระบบใหม่'); render(); return openLogin(); }
+    if (r.err === 'forbidden') return alert('บัญชีนี้ไม่มีสิทธิ์อนุมัติ');
+    if (r.err === 'changed') { alert('ข้อมูลในชีตเปลี่ยนไป ระบบโหลดใหม่ให้แล้ว กรุณากดอีกครั้ง'); return load(); }
+    alert('ผิดพลาด: ' + r.err);
+  } catch (e) { alert('ส่งข้อมูลไม่สำเร็จ ตรวจสอบอินเทอร์เน็ต'); }
+}
+
+document.querySelector('.tabs').onclick = e => { if (e.target.dataset.t) { tab = e.target.dataset.t; promo = 'ทั้งหมด'; render(); } };
 $('chips').onclick = e => { if (e.target.dataset.p) { promo = e.target.dataset.p; render(); } };
+$('grid').onclick = e => { const a = e.target.dataset.a; if (a) act(a, items[+e.target.dataset.i]); };
 $('q').oninput = e => { q = e.target.value; render(); };
-$('lock').onclick = () => {
-  if (unlocked) { code = ''; return load(); }
-  const c = prompt('ใส่รหัสเพื่อดูต้นทุน/กำไร');
-  if (c) { code = c.trim(); load(); }
-};
+$('login').onclick = openLogin;
+$('close').onclick = () => $('dlg').close();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 setInterval(load, 60000);
 load();
