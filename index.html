@@ -171,8 +171,8 @@ function switchCity(c) {
 
 function render() {
   const ok = items.filter(i => i.approved), wt = items.filter(i => !i.approved);
-  $('t-ok').textContent = `โปรผ่านการพิจารณา (${ok.length})`;
-  $('t-wait').textContent = `โปรรอพิจารณา (${wt.length})`;
+  $('t-ok').textContent = `อนุมัติแล้ว (${ok.length})`;
+  $('t-wait').textContent = `รออนุมัติ (${wt.length})`;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
   const pool = tab === 'ok' ? ok : wt;
   const names = ['ทั้งหมด', ...new Set(pool.map(i => i.promo).filter(Boolean))];
