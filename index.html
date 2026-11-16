@@ -42,6 +42,10 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
 .b{font-size:15px;font-weight:700;border-radius:6px;padding:3px 9px;background:#eef0f4}
 .b.g{background:#dff3e5;color:var(--ok)}
 .b.r{background:#fbe0e0;color:var(--bad)}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.trio div{background:#eef0f4;border-radius:8px;padding:6px 4px;text-align:center}
+.trio small{display:block;font-size:12px;color:var(--mut)}
+.trio b{font:700 17px 'Kanit',sans-serif}
 .cost{margin-top:12px;padding:10px;border:2px dashed var(--ink);border-radius:8px;font-size:16px;background:#fffbe8}
 .cost b{font-family:'Kanit'}
 .ck{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px;border-radius:10px;background:#eef3fb;font-weight:700;cursor:pointer}
@@ -102,7 +106,7 @@ input:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--tag);ou
 </div></div>
 <script>
 // ▼ วาง URL ของ Apps Script Web App (ลงท้าย /exec) ตัวใหม่ที่ผูกกับชีตโปร ▼
-const API = 'https://script.google.com/macros/s/AKfycbxSwpFUGbZZLpYRGPa7SAe1ATA6gosoHItMPDr9KXnR0wFugOu4Vppsxa2CrSxeEhBoaw/exec';
+const API = 'https://script.google.com/macros/s/AKfycbz-ITgquXuA50fbT_OtQb7FbELqNoCncdMxWmEUl5kRC7VfhpIPOOiHqNCsDXyJUAhI/exec';
 const CLIENT_ID = '909287669276-e9ra107720vef8hkirhod1el8j8aalt5.apps.googleusercontent.com';  // ตัวเดิม
 const SHEET_ID = '1f7jIXOYD6u32tWUCbuvkRNg-Y__q3ZeHPBMvGanvZV0';
 const CITY = {bkk: 'คลังกรุงเทพ', ptt: 'คลังพัทยา', uc: 'ทีม UC'};
@@ -174,27 +178,25 @@ function count() {
 
 function card(i) {
   const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, has = isNum(i.priceVat);
-  let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}"><div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
+  const box = (l, v) => `<div><small>${l}</small><b>${isNum(v) ? fmt(v) : (v ? esc(v) : '-')}</b></div>`;
+  let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}">`;
+  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอนายติ๊กพิจารณา</span></div>';
+  h += `<div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
   h += has ? `<div class="pr">${fmt(i.priceVat)} <small>บาท/${esc(i.unit)} (รวม VAT)</small></div>
     ${isNum(i.priceNoVat) ? `<div class="sub">ก่อน VAT ${fmt(i.priceNoVat)} บาท</div>` : ''}`
     : '<div class="wait">รอราคา</div>';
+  if (isNum(i.totalVat)) h += `<div class="sub">ยอดทั้งเที่ยว ${fmt(i.totalVat)} บาท (รวม VAT) · ก่อน VAT ${fmt(Math.round(i.totalVat / 1.07 * 100) / 100)} บาท</div>`;
   h += '<div class="row">';
-  if (!i.approved) h += '<span class="b">⏳ รอนายติ๊กพิจารณา</span>';
   if (isNum(i.qty)) h += `<span class="b">ราคานี้เมื่อสั่ง ${fmt(i.qty)} ${esc(i.unit)}</span>`;
   if (i.delivery) h += `<span class="b">🚚 ${esc(i.delivery)}</span>`;
-  if (has && isNum(i.competitor)) {
-    const diff = i.competitor - i.priceVat;
-    h += diff > 0 ? `<span class="b g">ถูกกว่าคู่แข่ง ${fmt(diff)} บาท</span>` : `<span class="b">คู่แข่ง ${fmt(i.competitor)}</span>`;
-  } else if (i.competitor) h += `<span class="b">คู่แข่ง: ${esc(i.competitor)}</span>`;
-  if (isNum(i.market)) h += `<span class="b">ตลาด ${fmt(i.market)}</span>`;
   if (dt) h += `<span class="b ${dt.expired ? 'r' : 'g'}">${dt.expired ? 'หมดโปรแล้ว ' : 'โปรถึง '}${esc(dt.text)}</span>`;
   h += '</div>';
-  if (isNum(i.totalVat)) h += `<div class="sub">ยอดทั้งเที่ยว ${fmt(i.totalVat)} บาท (รวม VAT)</div>`;
-  if (i.note) h += `<div class="sub">📝 ${esc(i.note)}</div>`;
+  h += `<div class="trio">${box('คู่แข่ง', i.competitor)}${box('ตลาด', i.market)}${box('ราคาจัดซื้อ', i.buyPrice)}</div>`;
   if (isNum(i.costUnit) || isNum(i.profit))
     h += `<div class="cost">ต้นทุน <b>${isNum(i.costUnit) ? fmt(i.costUnit) : '-'}</b>/${esc(i.unit)}
       · กำไร <b>${isNum(i.profitPct) ? fmt(i.profitPct * 100) + '%' : '-'}</b>
       · ทั้งเที่ยว <b>${isNum(i.profit) ? fmt(i.profit) : '-'}</b> บาท</div>`;
+  if (i.note) h += `<div class="sub">📝 ${esc(i.note)}</div>`;
   if (!i.approved) h += `<label class="ck"><input type="checkbox" class="pck" data-r="${i.row}" ${sel.has(i.row) ? 'checked' : ''}> ติ๊กเพื่ออนุมัติ</label>`;
   return h + '</div>';
 }
