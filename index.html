@@ -171,8 +171,8 @@ function switchCity(c) {
 
 function render() {
   const ok = items.filter(i => i.approved), wt = items.filter(i => !i.approved);
-  $('t-ok').textContent = `อนุมัติแล้ว (${ok.length})`;
-  $('t-wait').textContent = `รออนุมัติ (${wt.length})`;
+  $('t-ok').textContent = `โปรผ่านการพิจารณา (${ok.length})`;
+  $('t-wait').textContent = `โปรรอพิจารณา (${wt.length})`;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
   const pool = tab === 'ok' ? ok : wt;
   const names = ['ทั้งหมด', ...new Set(pool.map(i => i.promo).filter(Boolean))];
@@ -192,7 +192,8 @@ function count() {
 
 const r2 = x => Math.round(x * 100) / 100;
 // ราคาที่ใช้แสดง: ที่นายพิมพ์อยู่ > ราคาที่อนุมัติ (W,X) > ราคาเดิมในชีต (P,Q)
-const eff = i => edits.get(i.row) || {nv: isNum(i.apprNV) ? i.apprNV : i.priceNoVat, v: isNum(i.apprV) ? i.apprV : i.priceVat};
+const rn = v => isNum(v) ? r2(v) : v;
+const eff = i => edits.get(i.row) || {nv: rn(isNum(i.apprNV) ? i.apprNV : i.priceNoVat), v: rn(isNum(i.apprV) ? i.apprV : i.priceVat)};
 function calc(i, p) {
   const ok = isNum(i.qty) && i.qty > 0 && isNum(p.v);
   const totV = ok ? r2(p.v * i.qty) : null, totNV = ok && isNum(p.nv) ? r2(p.nv * i.qty) : null;
@@ -204,13 +205,13 @@ const costHtml = (i, c) => (isNum(i.costUnit) || c.profit !== null)
   ? `<div class="cost">ต้นทุน <b>${isNum(i.costUnit) ? fmt(i.costUnit) : '-'}</b>/${esc(i.unit)}
       · กำไร <b>${c.pct !== null ? fmt(c.pct * 100) + '%' : '-'}</b>
       · ทั้งเที่ยว <b>${c.profit !== null ? fmt(c.profit) : '-'}</b> บาท${c.profit !== null && c.profit < 0 ? ' <span class="warn">⚠ ขาดทุน</span>' : ''}</div>` : '';
-const pin = (i, k, v, cls) => `<input class="pin ${cls || ''}" type="number" step="0.01" min="0" inputmode="decimal" placeholder="ใส่ราคา" data-r="${i.row}" data-k="${k}" value="${isNum(v) ? v : ''}">`;
+const pin = (i, k, v, cls) => `<input class="pin ${cls || ''}" type="number" step="0.01" min="0" inputmode="decimal" placeholder="ใส่ราคา" data-r="${i.row}" data-k="${k}" value="${isNum(v) ? r2(v) : ''}">`;
 
 function card(i) {
   const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, p = eff(i), c = calc(i, p);
   const box = (l, v) => `<div><small>${l}</small><b>${isNum(v) ? fmt(v) : (v ? esc(v) : '-')}</b></div>`;
   let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}">`;
-  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอผู้บริหารพิจารณา</span></div>';
+  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอนายติ๊กพิจารณา</span></div>';
   h += `<div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
   if (!i.approved) {
     h += `<div class="pe"><label>ราคา รวม VAT (บาท/${esc(i.unit)}) · พิมพ์ปรับได้</label>${pin(i, 'v', p.v)}</div>
@@ -304,7 +305,9 @@ async function approve() {
 document.querySelector('.tabs').onclick = e => { if (e.target.dataset.t) { tab = e.target.dataset.t; promo = 'ทั้งหมด'; st(''); render(); } };
 $('chips').onclick = e => { if (e.target.dataset.p) { promo = e.target.dataset.p; render(); } };
 $('grid').oninput = e => { if (e.target.classList.contains('pin')) onPin(e.target); };
-$('grid').onchange = e => { if (e.target.classList.contains('pck')) { const r = +e.target.dataset.r; e.target.checked ? sel.add(r) : sel.delete(r); count(); } };
+$('grid').onchange = e => {
+  if (e.target.classList.contains('pin')) { const x = parseFloat(e.target.value); if (isFinite(x) && x > 0) e.target.value = r2(x); return; }
+  if (e.target.classList.contains('pck')) { const r = +e.target.dataset.r; e.target.checked ? sel.add(r) : sel.delete(r); count(); } };
 $('all').onclick = () => {
   const all = view.length && view.every(i => sel.has(i.row));
   view.forEach(i => all ? sel.delete(i.row) : sel.add(i.row));
