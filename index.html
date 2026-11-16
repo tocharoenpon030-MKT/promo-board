@@ -180,7 +180,7 @@ function card(i) {
   const dt = dateInfo(i.validUntil), off = i.approved && dt && dt.expired, has = isNum(i.priceVat);
   const box = (l, v) => `<div><small>${l}</small><b>${isNum(v) ? fmt(v) : (v ? esc(v) : '-')}</b></div>`;
   let h = `<div class="card ${off ? 'off' : ''} ${i.approved ? '' : 'wt'}">`;
-  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอนายติ๊กพิจารณา</span></div>';
+  if (!i.approved) h += '<div class="row" style="margin:0 0 6px"><span class="b">⏳ รอคุณหนึ่งอนุมัติ</span></div>';
   h += `<div class="tg">${esc(i.promo)} · ${esc(i.group)}</div><div class="nm">${esc(i.name)}</div>`;
   h += has ? `<div class="pr">${fmt(i.priceVat)} <small>บาท/${esc(i.unit)} (รวม VAT)</small></div>
     ${isNum(i.priceNoVat) ? `<div class="sub">ก่อน VAT ${fmt(i.priceNoVat)} บาท</div>` : ''}`
